@@ -1,79 +1,225 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# ReplyFlow - AI Writing Assistant
 
-# Getting Started
+A Grammarly-style writing assistant app for Android built with React Native. Features system-wide text monitoring and AI-powered suggestions using Google Gemini API.
 
->**Note**: Make sure you have completed the [React Native - Environment Setup](https://reactnative.dev/docs/environment-setup) instructions till "Creating a new application" step, before proceeding.
+## Features
 
-## Step 1: Start the Metro Server
+- ✨ **System-Wide Overlay**: Floating button appears over all apps
+- 🎯 **Smart Text Monitoring**: Accessibility service monitors text input (with privacy protection)
+- 🤖 **AI-Powered Suggestions**:
+  - Grammar checking
+  - Spelling correction
+  - Text rephrasing (multiple tones)
+  - Tone adjustment
+  - Text shortening/expansion
+- 🔒 **Privacy First**: Passwords and sensitive fields are never captured
+- 📱 **Native Performance**: Smooth 60 FPS draggable overlay
 
-First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
+## Prerequisites
 
-To start Metro, run the following command from the _root_ of your React Native project:
+- Node.js 18+
+- React Native development environment set up
+- Android SDK (API 29+)
+- Physical Android device (Android 10+) for testing
+- Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
+
+## Installation
+
+### 1. Install Dependencies
 
 ```bash
-# using npm
-npm start
-
-# OR using Yarn
-yarn start
+yarn install
 ```
 
-## Step 2: Start your Application
-
-Let Metro Bundler run in its _own_ terminal. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ or _iOS_ app:
-
-### For Android
+### 2. Install Pods (if on macOS)
 
 ```bash
-# using npm
-npm run android
+cd ios && pod install && cd ..
+```
 
-# OR using Yarn
+### 3. Build and Run
+
+```bash
+# Start Metro bundler
+yarn start
+
+# In another terminal, run on Android
 yarn android
 ```
 
-### For iOS
+## Setup Instructions
 
-```bash
-# using npm
-npm run ios
+### 1. Grant Permissions
 
-# OR using Yarn
-yarn ios
+When you first open the app:
+
+1. **Display Over Apps**: Required for the floating button
+   - Tap "Grant Permission" on the home screen
+   - Enable "Display over other apps" in system settings
+
+2. **Accessibility Service**: Required for text monitoring
+   - Tap "Enable" on the home screen
+   - Find "ReplyFlow" in accessibility settings
+   - Enable the service
+
+3. **Notifications** (Android 13+): Automatically requested
+
+### 2. Configure API Key
+
+1. Go to Settings (⚙ button on home screen)
+2. Enter your Google Gemini API key
+3. Tap "Save"
+4. Tap "Test API" to verify it works
+
+### 3. Enable Service
+
+1. Return to home screen
+2. Toggle "Writing Assistant" ON
+3. You should see a notification "ReplyFlow Active"
+4. The floating button will appear on your screen
+
+## Usage
+
+1. **Open any app** (WhatsApp, Gmail, Notes, etc.)
+2. **Start typing** in a text field
+3. **Tap the floating button** when you want suggestions
+4. **Select a tab** (Grammar, Spelling, Rephrase, Tone, Length)
+5. **Review the suggestion** and tap "Apply" to copy it
+6. **Paste** the suggestion in your target app
+
+## Project Structure
+
+```
+replyflow/
+├── android/
+│   └── app/src/main/
+│       ├── java/com/replyflow/
+│       │   ├── FloatingButtonService.kt    # Foreground service
+│       │   ├── TextMonitorService.kt       # Accessibility service
+│       │   ├── OverlayModule.kt            # React Native bridge
+│       │   └── OverlayPackage.kt           # Package registration
+│       └── res/
+│           ├── layout/
+│           │   └── floating_button_layout.xml
+│           ├── drawable/
+│           │   └── floating_button_background.xml
+│           └── xml/
+│               └── accessibility_service_config.xml
+├── src/
+│   ├── screens/
+│   │   ├── HomeScreen.tsx                  # Main dashboard
+│   │   └── SettingsScreen.tsx              # Settings & API config
+│   ├── components/
+│   │   └── SuggestionBottomSheet.tsx       # AI suggestions modal
+│   ├── services/
+│   │   ├── GeminiService.ts                # AI integration
+│   │   ├── OverlayService.ts               # Native module wrapper
+│   │   └── StorageService.ts               # Persistent storage
+│   └── types/
+│       └── index.ts                        # TypeScript types
+└── App.tsx                                 # Main app component
 ```
 
-If everything is set up _correctly_, you should see your new app running in your _Android Emulator_ or _iOS Simulator_ shortly provided you have set up your emulator/simulator correctly.
+## Native Modules
 
-This is one way to run your app — you can also run it directly from within Android Studio and Xcode respectively.
+### FloatingButtonService
+- Foreground service that manages the overlay window
+- Creates draggable floating button
+- Sends click events to React Native
 
-## Step 3: Modifying your App
+### TextMonitorService
+- Accessibility service for text monitoring
+- Filters sensitive fields (passwords, credit cards)
+- Sends text events to React Native
 
-Now that you have successfully run the app, let's modify it.
+### OverlayModule
+- React Native bridge for native functionality
+- Permission checks and requests
+- Service lifecycle management
+- Event emitter for native-to-JS communication
 
-1. Open `App.tsx` in your text editor of choice and edit some lines.
-2. For **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Developer Menu** (<kbd>Ctrl</kbd> + <kbd>M</kbd> (on Window and Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (on macOS)) to see your changes!
+## Privacy & Security
 
-   For **iOS**: Hit <kbd>Cmd ⌘</kbd> + <kbd>R</kbd> in your iOS Simulator to reload the app and see your changes!
+- **No Data Collection**: Text is processed locally and via Gemini API only
+- **Sensitive Field Filtering**: Passwords, credit cards, OTPs are never captured
+- **User Control**: Service can be disabled anytime
+- **Transparent**: Open source code for review
 
-## Congratulations! :tada:
+## Troubleshooting
 
-You've successfully run and modified your React Native App. :partying_face:
+### Floating button doesn't appear
+- Check if "Display over apps" permission is granted
+- Ensure service is enabled (toggle ON)
+- Check notification tray for "ReplyFlow Active"
 
-### Now what?
+### Text not being captured
+- Enable accessibility service in system settings
+- Grant all required permissions
+- Restart the app
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [Introduction to React Native](https://reactnative.dev/docs/getting-started).
+### AI suggestions not working
+- Verify API key is correct in Settings
+- Test API connection in Settings
+- Check internet connection
+- Review Metro bundler logs for errors
 
-# Troubleshooting
+### Build errors
+```bash
+# Clean build
+cd android && ./gradlew clean && cd ..
+yarn android
+```
 
-If you can't get this to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+## Development
 
-# Learn More
+### Running in Development Mode
 
-To learn more about React Native, take a look at the following resources:
+```bash
+# Start Metro
+yarn start
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+# Run on Android
+yarn android
+
+# View logs
+yarn android --verbose
+```
+
+### Debugging Native Code
+
+1. Open `android/` folder in Android Studio
+2. Attach debugger to running app
+3. Set breakpoints in Kotlin files
+4. Use Logcat for native logs
+
+## Known Limitations
+
+- **Apply Suggestion**: Currently copies to clipboard (full paste automation requires additional permissions)
+- **iOS Support**: Not implemented (requires different approach)
+- **Offline Mode**: Requires internet for AI features
+
+## Future Enhancements
+
+- [ ] Auto-paste suggestions using accessibility service
+- [ ] Offline grammar/spelling check
+- [ ] Custom AI prompts
+- [ ] Suggestion history
+- [ ] Multi-language support
+- [ ] Dark mode
+- [ ] Widget support
+
+## License
+
+MIT
+
+## Credits
+
+Built with:
+- React Native
+- Google Gemini AI
+- @gorhom/bottom-sheet
+- React Navigation
+
+---
+
+**Note**: This app requires a physical Android device for testing. Overlay and accessibility features don't work properly on emulators.
