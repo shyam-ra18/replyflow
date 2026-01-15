@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#D1D5DB"
+    android:padding="4dp">
+
+    <!-- Row 1: [ ] { } # % ^ * + = -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="4dp">
+        
+        <Button android:id="@+id/key_lbracket" style="@style/KeyboardKey" android:text="[" />
+        <Button android:id="@+id/key_rbracket" style="@style/KeyboardKey" android:text="]" />
+        <Button android:id="@+id/key_lbrace" style="@style/KeyboardKey" android:text="{" />
+        <Button android:id="@+id/key_rbrace" style="@style/KeyboardKey" android:text="}" />
+        <Button android:id="@+id/key_hash" style="@style/KeyboardKey" android:text="#" />
+        <Button android:id="@+id/key_percent" style="@style/KeyboardKey" android:text="%" />
+        <Button android:id="@+id/key_caret" style="@style/KeyboardKey" android:text="^" />
+        <Button android:id="@+id/key_asterisk" style="@style/KeyboardKey" android:text="*" />
+        <Button android:id="@+id/key_plus" style="@style/KeyboardKey" android:text="+" />
+        <Button android:id="@+id/key_equals" style="@style/KeyboardKey" android:text="=" />
+    </LinearLayout>
+
+    <!-- Row 2: _ \ | ~ < > -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="4dp"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp">
+        
+        <Button android:id="@+id/key_underscore" style="@style/KeyboardKey" android:text="_" />
+        <Button android:id="@+id/key_backslash" style="@style/KeyboardKey" android:text="\\" />
+        <Button android:id="@+id/key_pipe" style="@style/KeyboardKey" android:text="|" />
+        <Button android:id="@+id/key_tilde" style="@style/KeyboardKey" android:text="~" />
+        <Button android:id="@+id/key_lt" style="@style/KeyboardKey" android:text="&lt;" />
+        <Button android:id="@+id/key_gt" style="@style/KeyboardKey" android:text="&gt;" />
+    </LinearLayout>
+
+    <!-- Row 3: 123 . , ? ! ' Backspace -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="4dp">
+        
+        <Button android:id="@+id/key_123" style="@style/KeyboardKeySpecial" android:text="123" android:layout_weight="1.5" />
+        <Button android:id="@+id/key_dot" style="@style/KeyboardKey" android:text="." />
+        <Button android:id="@+id/key_comma" style="@style/KeyboardKey" android:text="," />
+        <Button android:id="@+id/key_question" style="@style/KeyboardKey" android:text="?" />
+        <Button android:id="@+id/key_exclaim" style="@style/KeyboardKey" android:text="!" />
+        <Button android:id="@+id/key_apostrophe" style="@style/KeyboardKey" android:text="'" />
+        <Button android:id="@+id/key_backspace" style="@style/KeyboardKeySpecial" android:text="⌫" android:layout_weight="1.5" />
+    </LinearLayout>
+
+    <!-- Row 4: ABC Space Enter -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        
+        <Button android:id="@+id/key_abc" style="@style/KeyboardKeySpecial" android:text="ABC" android:layout_weight="1.5" />
+        <Button android:id="@+id/key_space" style="@style/KeyboardKey" android:text="space" android:layout_weight="5" />
+        <Button android:id="@+id/key_enter" style="@style/KeyboardKeySpecial" android:text="↵" android:layout_weight="1.5" />
+    </LinearLayout>
+
+</LinearLayout>
