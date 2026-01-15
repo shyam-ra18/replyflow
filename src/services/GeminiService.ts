@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ToneType } from '../types';
 
 // Environment variables - replace with your actual API key
-const GEMINI_API_KEY = 'AIzaSyDUmfBmWODzBJGQPGgEzXJhQPMPcOWKxkU'; // Replace with your key
+const GEMINI_API_KEY = ''; // Replace with your key
 const GEMINI_MODEL = 'gemini-1.5-flash';
 
 class GeminiService {
