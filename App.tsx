@@ -6,6 +6,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import SetupScreen from './src/screens/SetupScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { useSettingsStore } from './src/store/useSettingsStore';
+import KeyboardAIService from './src/services/KeyboardAIService';
 
 const Stack = createNativeStackNavigator();
 
@@ -15,6 +16,13 @@ const App = () => {
   useEffect(() => {
     // Load saved settings on app start
     loadSettings();
+
+    // Initialize keyboard AI service to handle AI actions from native keyboard
+    KeyboardAIService.initialize();
+
+    return () => {
+      KeyboardAIService.destroy();
+    };
   }, []);
 
   return (

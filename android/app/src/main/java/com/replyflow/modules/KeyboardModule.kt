@@ -113,6 +113,20 @@ class KeyboardModule(reactContext: ReactApplicationContext) :
     }
     
     @ReactMethod
+    fun updateSuggestions(suggestions: ReadableArray) {
+        val suggestionList = mutableListOf<String>()
+        for (i in 0 until suggestions.size()) {
+            suggestions.getString(i)?.let { suggestionList.add(it) }
+        }
+        SmartTypeKeyboardService.getInstance()?.updateSuggestions(suggestionList)
+    }
+    
+    @ReactMethod
+    fun replaceWithAIResponse(newText: String) {
+        SmartTypeKeyboardService.getInstance()?.replaceWithAIResponse(newText)
+    }
+    
+    @ReactMethod
     fun addListener(eventName: String) {
         // Required for RCTDeviceEventEmitter
     }

@@ -8,10 +8,14 @@ import android.view.inputmethod.InputConnection
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.widget.Button
+import android.widget.TextView
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.os.Vibrator
 import android.os.VibrationEffect
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
 import com.replyflow.R
@@ -20,14 +24,20 @@ import java.lang.ref.WeakReference
 
 class SmartTypeKeyboardService : InputMethodService() {
     
-    private lateinit var keyboardContainer: ViewGroup
-    private lateinit var lettersLayout: View
-    private lateinit var numbersLayout: View
-    private lateinit var symbolsLayout: View
-    private var currentLayout = 0 // 0 = letters, 1 = numbers, 2 = symbols
+    private var keyboardContainer: LinearLayout? = null
+    private var aiToolbar: View? = null
+    private var suggestionBar: View? = null
+    private var lettersLayout: View? = null
+    private var numbersLayout: View? = null
+    private var symbolsLayout: View? = null
+    private var currentLayout = 0
     private var isShiftActive = false
     private var isCapsLock = false
     private var vibrator: Vibrator? = null
+    private var tonePopup: PopupWindow? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var typingRunnable: Runnable? = null
+    private var isViewInitialized = false
     
     companion object {
         private var instance: WeakReference<SmartTypeKeyboardService>? = null
@@ -47,48 +57,236 @@ class SmartTypeKeyboardService : InputMethodService() {
     }
     
     override fun onCreateInputView(): View {
-        // Create container for all layouts
-        keyboardContainer = LinearLayout(this).apply {
+        val inflater = LayoutInflater.from(this)
+        
+        // Create main container
+        val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
+        keyboardContainer = container
         
-        // Inflate all keyboard layouts
-        val inflater = LayoutInflater.from(this)
-        lettersLayout = inflater.inflate(R.layout.keyboard_letters, keyboardContainer, false)
-        numbersLayout = inflater.inflate(R.layout.keyboard_numbers, keyboardContainer, false)
-        symbolsLayout = inflater.inflate(R.layout.keyboard_symbols, keyboardContainer, false)
+        // Inflate AI toolbar
+        aiToolbar = inflater.inflate(R.layout.ai_toolbar, container, false)
+        setupAIToolbar()
+        
+        // Inflate suggestion bar
+        suggestionBar = inflater.inflate(R.layout.suggestion_bar, container, false)
+        setupSuggestionBar()
+        
+        // Inflate keyboard layouts
+        lettersLayout = inflater.inflate(R.layout.keyboard_letters, container, false)
+        numbersLayout = inflater.inflate(R.layout.keyboard_numbers, container, false)
+        symbolsLayout = inflater.inflate(R.layout.keyboard_symbols, container, false)
         
         // Setup all layouts
         setupLettersLayout()
         setupNumbersLayout()
         setupSymbolsLayout()
         
-        // Start with letters layout
-        keyboardContainer.addView(lettersLayout)
+        // Add views to container
+        container.addView(aiToolbar)
+        container.addView(suggestionBar)
+        container.addView(lettersLayout)
         currentLayout = LAYOUT_LETTERS
         
         // Enable hardware acceleration
-        keyboardContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        container.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         
-        return keyboardContainer
+        isViewInitialized = true
+        return container
+    }
+    
+    private fun setupAIToolbar() {
+        val toolbar = aiToolbar ?: return
+        
+        toolbar.findViewById<Button>(R.id.btn_tone)?.setOnClickListener {
+            vibrateKey()
+            showTonePicker()
+        }
+        
+        toolbar.findViewById<Button>(R.id.btn_expand)?.setOnClickListener {
+            vibrateKey()
+            triggerAIAction("expand")
+        }
+        
+        toolbar.findViewById<Button>(R.id.btn_summarize)?.setOnClickListener {
+            vibrateKey()
+            triggerAIAction("summarize")
+        }
+        
+        toolbar.findViewById<Button>(R.id.btn_replies)?.setOnClickListener {
+            vibrateKey()
+            triggerAIAction("replies")
+        }
+    }
+    
+    private fun setupSuggestionBar() {
+        val bar = suggestionBar ?: return
+        
+        bar.findViewById<TextView>(R.id.suggestion_1)?.setOnClickListener {
+            vibrateKey()
+            insertSuggestion((it as TextView).text.toString())
+        }
+        bar.findViewById<TextView>(R.id.suggestion_2)?.setOnClickListener {
+            vibrateKey()
+            insertSuggestion((it as TextView).text.toString())
+        }
+        bar.findViewById<TextView>(R.id.suggestion_3)?.setOnClickListener {
+            vibrateKey()
+            insertSuggestion((it as TextView).text.toString())
+        }
+    }
+    
+    private fun insertSuggestion(text: String) {
+        currentInputConnection?.commitText("$text ", 1)
+        hideSuggestions()
+    }
+    
+    fun showSuggestions(suggestions: List<String>) {
+        if (!isViewInitialized) return
+        val bar = suggestionBar ?: return
+        
+        handler.post {
+            bar.findViewById<TextView>(R.id.suggestion_hint)?.visibility = View.GONE
+            
+            val chip1 = bar.findViewById<TextView>(R.id.suggestion_1)
+            val chip2 = bar.findViewById<TextView>(R.id.suggestion_2)
+            val chip3 = bar.findViewById<TextView>(R.id.suggestion_3)
+            
+            if (suggestions.isNotEmpty()) {
+                chip1?.text = suggestions[0]
+                chip1?.visibility = View.VISIBLE
+            } else {
+                chip1?.visibility = View.GONE
+            }
+            
+            if (suggestions.size > 1) {
+                chip2?.text = suggestions[1]
+                chip2?.visibility = View.VISIBLE
+            } else {
+                chip2?.visibility = View.GONE
+            }
+            
+            if (suggestions.size > 2) {
+                chip3?.text = suggestions[2]
+                chip3?.visibility = View.VISIBLE
+            } else {
+                chip3?.visibility = View.GONE
+            }
+        }
+    }
+    
+    private fun hideSuggestions() {
+        if (!isViewInitialized) return
+        val bar = suggestionBar ?: return
+        
+        handler.post {
+            bar.findViewById<TextView>(R.id.suggestion_1)?.visibility = View.GONE
+            bar.findViewById<TextView>(R.id.suggestion_2)?.visibility = View.GONE
+            bar.findViewById<TextView>(R.id.suggestion_3)?.visibility = View.GONE
+            bar.findViewById<TextView>(R.id.suggestion_hint)?.visibility = View.VISIBLE
+        }
+    }
+    
+    private fun showTonePicker() {
+        val toolbar = aiToolbar ?: return
+        val inflater = LayoutInflater.from(this)
+        val toneView = inflater.inflate(R.layout.tone_picker, null)
+        
+        tonePopup = PopupWindow(
+            toneView,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        )
+        
+        toneView.findViewById<Button>(R.id.tone_professional)?.setOnClickListener {
+            applyTone("professional")
+            tonePopup?.dismiss()
+        }
+        toneView.findViewById<Button>(R.id.tone_casual)?.setOnClickListener {
+            applyTone("casual")
+            tonePopup?.dismiss()
+        }
+        toneView.findViewById<Button>(R.id.tone_confident)?.setOnClickListener {
+            applyTone("confident")
+            tonePopup?.dismiss()
+        }
+        toneView.findViewById<Button>(R.id.tone_empathetic)?.setOnClickListener {
+            applyTone("empathetic")
+            tonePopup?.dismiss()
+        }
+        toneView.findViewById<Button>(R.id.tone_concise)?.setOnClickListener {
+            applyTone("concise")
+            tonePopup?.dismiss()
+        }
+        
+        tonePopup?.showAsDropDown(toolbar)
+    }
+    
+    private fun applyTone(tone: String) {
+        val currentText = getCurrentTextFromModule()
+        if (currentText.isNotEmpty()) {
+            val params = Arguments.createMap()
+            params.putString("action", "tone")
+            params.putString("tone", tone)
+            params.putString("text", currentText)
+            sendEventToReactNative("onAIAction", params)
+        }
+    }
+    
+    private fun triggerAIAction(action: String) {
+        val currentText = getCurrentTextFromModule()
+        val params = Arguments.createMap()
+        params.putString("action", action)
+        params.putString("text", currentText)
+        sendEventToReactNative("onAIAction", params)
+    }
+    
+    fun updateSuggestions(suggestions: List<String>) {
+        showSuggestions(suggestions)
+    }
+    
+    fun replaceWithAIResponse(newText: String) {
+        currentInputConnection?.let { ic ->
+            ic.performContextMenuAction(android.R.id.selectAll)
+            ic.commitText(newText, 1)
+        }
     }
     
     private fun switchToLayout(layout: Int) {
-        keyboardContainer.removeAllViews()
+        val container = keyboardContainer ?: return
+        if (container.childCount < 3) return
+        
+        container.removeViewAt(2)
+        
         when (layout) {
-            LAYOUT_LETTERS -> keyboardContainer.addView(lettersLayout)
-            LAYOUT_NUMBERS -> keyboardContainer.addView(numbersLayout)
-            LAYOUT_SYMBOLS -> keyboardContainer.addView(symbolsLayout)
+            LAYOUT_LETTERS -> lettersLayout?.let { container.addView(it) }
+            LAYOUT_NUMBERS -> numbersLayout?.let { container.addView(it) }
+            LAYOUT_SYMBOLS -> symbolsLayout?.let { container.addView(it) }
         }
         currentLayout = layout
     }
     
+    private fun requestSuggestions(text: String) {
+        typingRunnable?.let { handler.removeCallbacks(it) }
+        
+        typingRunnable = Runnable {
+            val params = Arguments.createMap()
+            params.putString("action", "suggestions")
+            params.putString("text", text)
+            sendEventToReactNative("onAIAction", params)
+        }
+        handler.postDelayed(typingRunnable!!, 300)
+    }
+    
     private fun setupLettersLayout() {
-        // Letter keys - QWERTY layout
+        val layout = lettersLayout ?: return
+        
         val letterKeys = mapOf(
             R.id.key_q to "q", R.id.key_w to "w", R.id.key_e to "e",
             R.id.key_r to "r", R.id.key_t to "t", R.id.key_y to "y",
@@ -102,30 +300,31 @@ class SmartTypeKeyboardService : InputMethodService() {
         )
         
         letterKeys.forEach { (id, letter) ->
-            lettersLayout.findViewById<Button>(id)?.setOnClickListener {
+            layout.findViewById<Button>(id)?.setOnClickListener {
                 vibrateKey()
                 val text = if (isShiftActive || isCapsLock) letter.uppercase() else letter
-                // Use getCurrentInputConnection() - the correct way!
                 currentInputConnection?.commitText(text, 1)
                 if (isShiftActive && !isCapsLock) {
                     isShiftActive = false
                     updateShiftKeyVisual()
                 }
+                
+                val currentText = getCurrentTextFromModule()
+                if (currentText.isNotEmpty()) {
+                    requestSuggestions(currentText)
+                }
             }
         }
         
-        // Shift key - single tap for shift, double tap for caps lock
-        val shiftButton = lettersLayout.findViewById<Button>(R.id.key_shift)
+        val shiftButton = layout.findViewById<Button>(R.id.key_shift)
         var lastShiftTime = 0L
         shiftButton?.setOnClickListener {
             vibrateKey()
             val now = System.currentTimeMillis()
             if (now - lastShiftTime < 300) {
-                // Double tap - toggle caps lock
                 isCapsLock = !isCapsLock
                 isShiftActive = isCapsLock
             } else {
-                // Single tap - toggle shift
                 if (isCapsLock) {
                     isCapsLock = false
                     isShiftActive = false
@@ -137,45 +336,43 @@ class SmartTypeKeyboardService : InputMethodService() {
             updateShiftKeyVisual()
         }
         
-        // Backspace key
-        val backspaceButton = lettersLayout.findViewById<Button>(R.id.key_backspace)
+        val backspaceButton = layout.findViewById<Button>(R.id.key_backspace)
         backspaceButton?.setOnClickListener {
             vibrateKey()
             currentInputConnection?.deleteSurroundingText(1, 0)
         }
-        // Long press backspace to delete word
         backspaceButton?.setOnLongClickListener {
             vibrateKey()
             currentInputConnection?.deleteSurroundingText(20, 0)
             true
         }
         
-        // Space key
-        lettersLayout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
             vibrateKey()
             currentInputConnection?.commitText(" ", 1)
+            val currentText = getCurrentTextFromModule()
+            if (currentText.isNotEmpty()) {
+                requestSuggestions(currentText)
+            }
         }
         
-        // Enter key
-        lettersLayout.findViewById<Button>(R.id.key_enter)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_enter)?.setOnClickListener {
             vibrateKey()
-            val ic = currentInputConnection
-            if (ic != null) {
-                // Send enter key event
+            currentInputConnection?.let { ic ->
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
             }
         }
         
-        // 123 key - switch to numbers
-        lettersLayout.findViewById<Button>(R.id.key_numbers)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_numbers)?.setOnClickListener {
             vibrateKey()
             switchToLayout(LAYOUT_NUMBERS)
         }
     }
     
     private fun setupNumbersLayout() {
-        // Number keys
+        val layout = numbersLayout ?: return
+        
         val numberKeys = mapOf(
             R.id.key_1 to "1", R.id.key_2 to "2", R.id.key_3 to "3",
             R.id.key_4 to "4", R.id.key_5 to "5", R.id.key_6 to "6",
@@ -184,13 +381,12 @@ class SmartTypeKeyboardService : InputMethodService() {
         )
         
         numberKeys.forEach { (id, num) ->
-            numbersLayout.findViewById<Button>(id)?.setOnClickListener {
+            layout.findViewById<Button>(id)?.setOnClickListener {
                 vibrateKey()
                 currentInputConnection?.commitText(num, 1)
             }
         }
         
-        // Symbol keys
         val symbolKeys = mapOf(
             R.id.key_minus to "-", R.id.key_slash to "/", R.id.key_colon to ":",
             R.id.key_semicolon to ";", R.id.key_lparen to "(", R.id.key_rparen to ")",
@@ -200,41 +396,35 @@ class SmartTypeKeyboardService : InputMethodService() {
         )
         
         symbolKeys.forEach { (id, sym) ->
-            numbersLayout.findViewById<Button>(id)?.setOnClickListener {
+            layout.findViewById<Button>(id)?.setOnClickListener {
                 vibrateKey()
                 currentInputConnection?.commitText(sym, 1)
             }
         }
         
-        // ABC key - switch to letters
-        numbersLayout.findViewById<Button>(R.id.key_abc)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_abc)?.setOnClickListener {
             vibrateKey()
             switchToLayout(LAYOUT_LETTERS)
         }
         
-        // #+= key - switch to symbols
-        numbersLayout.findViewById<Button>(R.id.key_symbols)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_symbols)?.setOnClickListener {
             vibrateKey()
             switchToLayout(LAYOUT_SYMBOLS)
         }
         
-        // Backspace
-        numbersLayout.findViewById<Button>(R.id.key_backspace)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_backspace)?.setOnClickListener {
             vibrateKey()
             currentInputConnection?.deleteSurroundingText(1, 0)
         }
         
-        // Space
-        numbersLayout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
             vibrateKey()
             currentInputConnection?.commitText(" ", 1)
         }
         
-        // Enter
-        numbersLayout.findViewById<Button>(R.id.key_enter)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_enter)?.setOnClickListener {
             vibrateKey()
-            val ic = currentInputConnection
-            if (ic != null) {
+            currentInputConnection?.let { ic ->
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
             }
@@ -242,7 +432,8 @@ class SmartTypeKeyboardService : InputMethodService() {
     }
     
     private fun setupSymbolsLayout() {
-        // Extended symbol keys
+        val layout = symbolsLayout ?: return
+        
         val extSymbolKeys = mapOf(
             R.id.key_lbracket to "[", R.id.key_rbracket to "]",
             R.id.key_lbrace to "{", R.id.key_rbrace to "}",
@@ -258,41 +449,35 @@ class SmartTypeKeyboardService : InputMethodService() {
         )
         
         extSymbolKeys.forEach { (id, sym) ->
-            symbolsLayout.findViewById<Button>(id)?.setOnClickListener {
+            layout.findViewById<Button>(id)?.setOnClickListener {
                 vibrateKey()
                 currentInputConnection?.commitText(sym, 1)
             }
         }
         
-        // ABC key
-        symbolsLayout.findViewById<Button>(R.id.key_abc)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_abc)?.setOnClickListener {
             vibrateKey()
             switchToLayout(LAYOUT_LETTERS)
         }
         
-        // 123 key
-        symbolsLayout.findViewById<Button>(R.id.key_123)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_123)?.setOnClickListener {
             vibrateKey()
             switchToLayout(LAYOUT_NUMBERS)
         }
         
-        // Backspace
-        symbolsLayout.findViewById<Button>(R.id.key_backspace)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_backspace)?.setOnClickListener {
             vibrateKey()
             currentInputConnection?.deleteSurroundingText(1, 0)
         }
         
-        // Space
-        symbolsLayout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
             vibrateKey()
             currentInputConnection?.commitText(" ", 1)
         }
         
-        // Enter
-        symbolsLayout.findViewById<Button>(R.id.key_enter)?.setOnClickListener {
+        layout.findViewById<Button>(R.id.key_enter)?.setOnClickListener {
             vibrateKey()
-            val ic = currentInputConnection
-            if (ic != null) {
+            currentInputConnection?.let { ic ->
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                 ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
             }
@@ -300,8 +485,7 @@ class SmartTypeKeyboardService : InputMethodService() {
     }
     
     private fun updateShiftKeyVisual() {
-        val shiftButton = lettersLayout.findViewById<Button>(R.id.key_shift)
-        shiftButton?.text = when {
+        lettersLayout?.findViewById<Button>(R.id.key_shift)?.text = when {
             isCapsLock -> "⇪"
             isShiftActive -> "⬆"
             else -> "⇧"
@@ -312,36 +496,35 @@ class SmartTypeKeyboardService : InputMethodService() {
         try {
             vibrator?.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE))
         } catch (e: Exception) {
-            // Ignore vibration errors
+            // Ignore
         }
     }
     
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         
-        // Notify React Native about input start
         val params = Arguments.createMap()
         params.putString("inputType", attribute?.inputType.toString())
         params.putString("packageName", attribute?.packageName)
         params.putString("fieldId", attribute?.fieldId.toString())
-        
         sendEventToReactNative("onInputStart", params)
     }
     
     override fun onFinishInput() {
         super.onFinishInput()
+        if (isViewInitialized) {
+            hideSuggestions()
+        }
         sendEventToReactNative("onInputFinish", null)
     }
     
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         
-        // Always switch to letters layout when keyboard opens
         if (currentLayout != LAYOUT_LETTERS) {
             switchToLayout(LAYOUT_LETTERS)
         }
         
-        // Detect if this is a password field
         val isPassword = info?.inputType?.let { inputType ->
             val typeClass = inputType and android.text.InputType.TYPE_MASK_CLASS
             val typeVariation = inputType and android.text.InputType.TYPE_MASK_VARIATION
@@ -357,7 +540,6 @@ class SmartTypeKeyboardService : InputMethodService() {
         sendEventToReactNative("onInputViewStart", params)
     }
     
-    // Public methods for KeyboardModule to call
     fun insertTextFromModule(text: String) {
         currentInputConnection?.commitText(text, 1)
     }
@@ -398,6 +580,9 @@ class SmartTypeKeyboardService : InputMethodService() {
     
     override fun onDestroy() {
         super.onDestroy()
+        tonePopup?.dismiss()
+        typingRunnable?.let { handler.removeCallbacks(it) }
+        isViewInitialized = false
         instance = null
     }
 }

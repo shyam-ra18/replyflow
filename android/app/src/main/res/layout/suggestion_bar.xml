@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#F3F4F6"
+    android:scrollbars="none"
+    android:paddingVertical="6dp"
+    android:paddingHorizontal="4dp">
+
+    <LinearLayout
+        android:id="@+id/suggestion_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/suggestion_1"
+            style="@style/SuggestionChip"
+            android:text="suggestion 1"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/suggestion_2"
+            style="@style/SuggestionChip"
+            android:text="suggestion 2"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/suggestion_3"
+            style="@style/SuggestionChip"
+            android:text="suggestion 3"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/suggestion_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Start typing for AI suggestions..."
+            android:textColor="#9CA3AF"
+            android:textSize="12sp"
+            android:paddingHorizontal="12dp" />
+
+    </LinearLayout>
+
+</HorizontalScrollView>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#FFFFFF"
+    android:padding="8dp"
+    android:elevation="4dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Select Tone"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#1F2937"
+        android:paddingBottom="12dp" />
+
+    <Button
+        android:id="@+id/tone_professional"
+        style="@style/ToneOptionButton"
+        android:text="📊 Professional" />
+
+    <Button
+        android:id="@+id/tone_casual"
+        style="@style/ToneOptionButton"
+        android:text="😊 Casual" />
+
+    <Button
+        android:id="@+id/tone_confident"
+        style="@style/ToneOptionButton"
+        android:text="💪 Confident" />
+
+    <Button
+        android:id="@+id/tone_empathetic"
+        style="@style/ToneOptionButton"
+        android:text="💙 Empathetic" />
+
+    <Button
+        android:id="@+id/tone_concise"
+        style="@style/ToneOptionButton"
+        android:text="⚡ Concise" />
+
+</LinearLayout>

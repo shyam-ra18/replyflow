@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="#E5E7EB"
+    android:padding="6dp"
+    android:gravity="center">
+
+    <Button
+        android:id="@+id/btn_tone"
+        style="@style/AIToolbarButton"
+        android:text="🎨 Tone"
+        android:contentDescription="Adjust tone" />
+
+    <Button
+        android:id="@+id/btn_expand"
+        style="@style/AIToolbarButton"
+        android:text="✨ Expand"
+        android:contentDescription="Expand text" />
+
+    <Button
+        android:id="@+id/btn_summarize"
+        style="@style/AIToolbarButton"
+        android:text="📝 Sum"
+        android:contentDescription="Summarize text" />
+
+    <Button
+        android:id="@+id/btn_replies"
+        style="@style/AIToolbarButton"
+        android:text="💬 Reply"
+        android:contentDescription="Smart replies" />
+
+</LinearLayout>
