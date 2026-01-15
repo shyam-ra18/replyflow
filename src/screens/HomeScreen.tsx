@@ -1,402 +1,241 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
     StyleSheet,
-    Switch,
     TouchableOpacity,
     ScrollView,
-    Alert,
-    StatusBar,
+    NativeModules,
+    TextInput,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import OverlayService from '../services/OverlayService';
-import StorageService from '../services/StorageService';
-import { ServiceStatus } from '../types';
+import { useKeyboardStore } from '../store/useKeyboardStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 
-const HomeScreen: React.FC = () => {
-    const navigation = useNavigation();
-    const [isServiceEnabled, setIsServiceEnabled] = useState(false);
-    const [serviceStatus, setServiceStatus] = useState<ServiceStatus>({
-        isRunning: false,
-        hasOverlayPermission: false,
-        hasAccessibilityPermission: false,
-        hasNotificationPermission: true, // Notifications don't need explicit check on older Android
-    });
+const { KeyboardModule } = NativeModules;
+
+const HomeScreen = ({ navigation }: any) => {
+    const { isEnabled, isDefault, setEnabled, setDefault } = useKeyboardStore();
+    const aiEnabled = useSettingsStore(state => state.aiEnabled);
+    const [isChecking, setIsChecking] = useState(false);
 
     useEffect(() => {
-        checkPermissionsAndStatus();
+        checkKeyboardStatus();
     }, []);
 
-    const checkPermissionsAndStatus = async () => {
-        const [overlayPerm, accessibilityPerm, notificationPerm, running, enabled] = await Promise.all([
-            OverlayService.checkOverlayPermission(),
-            OverlayService.checkAccessibilityPermission(),
-            OverlayService.checkNotificationPermission(),
-            OverlayService.isServiceRunning(),
-            StorageService.isServiceEnabled(),
-        ]);
-
-        setServiceStatus({
-            isRunning: running,
-            hasOverlayPermission: overlayPerm,
-            hasAccessibilityPermission: accessibilityPerm,
-            hasNotificationPermission: notificationPerm,
-        });
-        setIsServiceEnabled(enabled);
-    };
-
-    const handleToggleService = async (value: boolean) => {
-        if (value) {
-            // Check permissions before enabling
-            if (!serviceStatus.hasOverlayPermission) {
-                Alert.alert(
-                    'Permission Required',
-                    'ReplyFlow needs permission to display over other apps.',
-                    [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                            text: 'Grant Permission',
-                            onPress: () => {
-                                OverlayService.requestOverlayPermission();
-                                setTimeout(checkPermissionsAndStatus, 1000);
-                            },
-                        },
-                    ]
-                );
-                return;
-            }
-
-            if (!serviceStatus.hasNotificationPermission) {
-                Alert.alert(
-                    'Notifications Required',
-                    'ReplyFlow needs notification permission to run the writing assistant service accurately.',
-                    [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                            text: 'Enable',
-                            onPress: () => {
-                                OverlayService.requestNotificationPermission();
-                                setTimeout(checkPermissionsAndStatus, 1000);
-                            },
-                        },
-                    ]
-                );
-                return;
-            }
-
-            if (!serviceStatus.hasAccessibilityPermission) {
-                Alert.alert(
-                    'Accessibility Service Required',
-                    'ReplyFlow needs accessibility permission to monitor text input across apps. Your privacy is protected - passwords and sensitive information are never captured.',
-                    [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                            text: 'Enable',
-                            onPress: () => {
-                                OverlayService.requestAccessibilityPermission();
-                                setTimeout(checkPermissionsAndStatus, 1000);
-                            },
-                        },
-                    ]
-                );
-                return;
-            }
-
-            // Start service
-            const started = await OverlayService.startService();
-            if (started) {
-                setIsServiceEnabled(true);
-                await StorageService.setServiceEnabled(true);
-                checkPermissionsAndStatus();
-            } else {
-                Alert.alert('Error', 'Failed to start service. Please try again.');
-            }
-        } else {
-            // Stop service
-            const stopped = await OverlayService.stopService();
-            if (stopped) {
-                setIsServiceEnabled(false);
-                await StorageService.setServiceEnabled(false);
-                checkPermissionsAndStatus();
-            }
+    const checkKeyboardStatus = async () => {
+        setIsChecking(true);
+        try {
+            const enabled = await KeyboardModule.isKeyboardEnabled();
+            const defaultKb = await KeyboardModule.isDefaultKeyboard();
+            setEnabled(enabled);
+            setDefault(defaultKb);
+        } catch (error) {
+            console.error('Failed to check keyboard status:', error);
+        } finally {
+            setIsChecking(false);
         }
     };
 
-    const PermissionCard = ({
-        title,
-        granted,
-        onPress,
-    }: {
-        title: string;
-        granted: boolean;
-        onPress?: () => void;
-    }) => (
-        <TouchableOpacity
-            style={[styles.permissionCard, granted && styles.permissionCardGranted]}
-            onPress={onPress}
-            disabled={granted}
-        >
-            <View style={styles.permissionIcon}>
-                <Text style={styles.permissionIconText}>{granted ? '✓' : '!'}</Text>
-            </View>
-            <View style={styles.permissionInfo}>
-                <Text style={styles.permissionTitle}>{title}</Text>
-                <Text style={styles.permissionStatus}>
-                    {granted ? 'Granted' : 'Not Granted'}
-                </Text>
-            </View>
-        </TouchableOpacity>
-    );
+    const openKeyboardSettings = async () => {
+        try {
+            await KeyboardModule.openKeyboardSettings();
+        } catch (error) {
+            console.error('Failed to open settings:', error);
+        }
+    };
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#4285F4" />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>ReplyFlow</Text>
-                <Text style={styles.headerSubtitle}>AI Writing Assistant</Text>
+        <ScrollView style={styles.container}>
+            {/* Test Input */}
+            <View style={styles.testCard}>
+                <Text style={styles.testTitle}>🎯 Test Your Keyboard</Text>
+                <TextInput
+                    style={styles.testInput}
+                    placeholder="Tap here to test the keyboard..."
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={3}
+                />
+                <Text style={styles.testHint}>
+                    💡 Tap the input above to open your keyboard
+                </Text>
             </View>
 
-            <ScrollView style={styles.content}>
-                {/* Master Toggle */}
-                <View style={styles.toggleSection}>
-                    <View style={styles.toggleInfo}>
-                        <Text style={styles.toggleTitle}>Writing Assistant</Text>
-                        <Text style={styles.toggleSubtitle}>
-                            {isServiceEnabled ? 'Active' : 'Inactive'}
-                        </Text>
-                    </View>
-                    <Switch
-                        value={isServiceEnabled}
-                        onValueChange={handleToggleService}
-                        trackColor={{ false: '#ccc', true: '#4285F4' }}
-                        thumbColor={isServiceEnabled ? '#fff' : '#f4f3f4'}
-                    />
+            {/* Keyboard Status */}
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Keyboard Status</Text>
+                <View style={styles.statusRow}>
+                    <Text style={styles.statusLabel}>Status:</Text>
+                    <Text style={[styles.statusValue, { color: isEnabled ? '#4CAF50' : '#F44336' }]}>
+                        {isEnabled ? (isDefault ? 'Active & Default' : 'Enabled') : 'Not Enabled'}
+                    </Text>
                 </View>
+                <TouchableOpacity
+                    style={styles.button}
+                    onPress={checkKeyboardStatus}
+                    disabled={isChecking}>
+                    <Text style={styles.buttonText}>
+                        {isChecking ? 'Checking...' : 'Refresh Status'}
+                    </Text>
+                </TouchableOpacity>
+            </View>
 
-                {/* Service Status */}
-                {isServiceEnabled && (
-                    <View style={styles.statusCard}>
-                        <Text style={styles.statusText}>
-                            {serviceStatus.isRunning
-                                ? '✓ Service is running'
-                                : '⚠ Service is not running'}
+            {/* AI Features */}
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>AI Features</Text>
+                <View style={styles.featureRow}>
+                    <Text style={styles.featureLabel}>AI Suggestions</Text>
+                    <Text style={styles.featureValue}>{aiEnabled ? 'ON' : 'OFF'}</Text>
+                </View>
+                <View style={styles.featureRow}>
+                    <Text style={styles.featureLabel}>Tone Adjustment</Text>
+                    <Text style={styles.featureValue}>5 Tones</Text>
+                </View>
+                <View style={styles.featureRow}>
+                    <Text style={styles.featureLabel}>Text Expansion</Text>
+                    <Text style={styles.featureValue}>Active</Text>
+                </View>
+                <View style={styles.featureRow}>
+                    <Text style={styles.featureLabel}>Smart Replies</Text>
+                    <Text style={styles.featureValue}>Active</Text>
+                </View>
+            </View>
+
+            {/* Quick Actions */}
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Quick Actions</Text>
+
+                {!isEnabled && (
+                    <TouchableOpacity
+                        style={[styles.button, styles.primaryButton]}
+                        onPress={() => navigation.navigate('Setup')}>
+                        <Text style={[styles.buttonText, styles.primaryButtonText]}>
+                            Setup Keyboard
                         </Text>
-                    </View>
+                    </TouchableOpacity>
                 )}
 
-                {/* Permissions */}
-                <Text style={styles.sectionTitle}>Permissions</Text>
-                <View style={styles.permissionsGrid}>
-                    <PermissionCard
-                        title="Display Over Apps"
-                        granted={serviceStatus.hasOverlayPermission}
-                        onPress={() => {
-                            OverlayService.requestOverlayPermission();
-                            setTimeout(checkPermissionsAndStatus, 1000);
-                        }}
-                    />
-                    <PermissionCard
-                        title="Accessibility Service"
-                        granted={serviceStatus.hasAccessibilityPermission}
-                        onPress={() => {
-                            OverlayService.requestAccessibilityPermission();
-                            setTimeout(checkPermissionsAndStatus, 1000);
-                        }}
-                    />
-                    <PermissionCard
-                        title="Notifications"
-                        granted={serviceStatus.hasNotificationPermission}
-                        onPress={() => {
-                            OverlayService.requestNotificationPermission();
-                            setTimeout(checkPermissionsAndStatus, 1000);
-                        }}
-                    />
-                </View>
-
-                {/* Features */}
-                <Text style={styles.sectionTitle}>Features</Text>
-                <View style={styles.featuresGrid}>
-                    <View style={styles.featureCard}>
-                        <Text style={styles.featureIcon}>✓</Text>
-                        <Text style={styles.featureTitle}>Grammar Check</Text>
-                    </View>
-                    <View style={styles.featureCard}>
-                        <Text style={styles.featureIcon}>Aa</Text>
-                        <Text style={styles.featureTitle}>Spelling</Text>
-                    </View>
-                    <View style={styles.featureCard}>
-                        <Text style={styles.featureIcon}>✨</Text>
-                        <Text style={styles.featureTitle}>Rephrase</Text>
-                    </View>
-                    <View style={styles.featureCard}>
-                        <Text style={styles.featureIcon}>🎭</Text>
-                        <Text style={styles.featureTitle}>Tone</Text>
-                    </View>
-                </View>
-
-                {/* Settings Button */}
                 <TouchableOpacity
-                    style={styles.settingsButton}
-                    onPress={() => navigation.navigate('Settings' as never)}
-                >
-                    <Text style={styles.settingsButtonText}>⚙ Settings</Text>
+                    style={styles.button}
+                    onPress={openKeyboardSettings}>
+                    <Text style={styles.buttonText}>Keyboard Settings</Text>
                 </TouchableOpacity>
-            </ScrollView>
-        </View>
+
+                <TouchableOpacity
+                    style={styles.button}
+                    onPress={() => navigation.navigate('Settings')}>
+                    <Text style={styles.buttonText}>App Settings</Text>
+                </TouchableOpacity>
+            </View>
+        </ScrollView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#F5F5F5',
     },
-    header: {
-        backgroundColor: '#4285F4',
-        padding: 24,
-        paddingTop: 48,
-    },
-    headerTitle: {
-        fontSize: 32,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    headerSubtitle: {
-        fontSize: 16,
-        color: '#fff',
-        opacity: 0.9,
-        marginTop: 4,
-    },
-    content: {
-        flex: 1,
-        padding: 16,
-    },
-    toggleSection: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
+    testCard: {
+        backgroundColor: '#FFFFFF',
+        margin: 16,
+        marginTop: 16,
         padding: 20,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
+        borderRadius: 12,
         elevation: 2,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
     },
-    toggleInfo: {
-        flex: 1,
-    },
-    toggleTitle: {
-        fontSize: 20,
-        fontWeight: '600',
+    testTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
         color: '#333',
+        marginBottom: 12,
     },
-    toggleSubtitle: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 4,
-    },
-    statusCard: {
-        backgroundColor: '#E8F5E9',
+    testInput: {
+        borderWidth: 1,
+        borderColor: '#D1D5DB',
         borderRadius: 8,
         padding: 12,
+        fontSize: 16,
+        color: '#1F2937',
+        backgroundColor: '#F9FAFB',
+        minHeight: 80,
+        textAlignVertical: 'top',
+    },
+    testHint: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 8,
+        fontStyle: 'italic',
+    },
+    card: {
+        backgroundColor: '#FFFFFF',
+        margin: 16,
+        marginTop: 0,
+        padding: 20,
+        borderRadius: 12,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    cardTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
         marginBottom: 16,
     },
-    statusText: {
-        fontSize: 14,
-        color: '#2E7D32',
-        fontWeight: '500',
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#333',
-        marginTop: 8,
-        marginBottom: 12,
-    },
-    permissionsGrid: {
-        marginBottom: 24,
-    },
-    permissionCard: {
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        padding: 16,
+    statusRow: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
-        borderWidth: 2,
-        borderColor: '#FFC107',
-        elevation: 1,
+        marginBottom: 16,
     },
-    permissionCardGranted: {
-        borderColor: '#4CAF50',
+    statusLabel: {
+        fontSize: 16,
+        color: '#666',
     },
-    permissionIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#f0f0f0',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    permissionIconText: {
-        fontSize: 20,
+    statusValue: {
+        fontSize: 16,
         fontWeight: 'bold',
     },
-    permissionInfo: {
-        flex: 1,
-    },
-    permissionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-    },
-    permissionStatus: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 2,
-    },
-    featuresGrid: {
+    featureRow: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
         justifyContent: 'space-between',
-        marginBottom: 24,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
     },
-    featureCard: {
-        backgroundColor: '#fff',
-        borderRadius: 8,
+    featureLabel: {
+        fontSize: 16,
+        color: '#666',
+    },
+    featureValue: {
+        fontSize: 16,
+        color: '#4A90E2',
+        fontWeight: '600',
+    },
+    button: {
+        backgroundColor: '#F0F0F0',
         padding: 16,
-        width: '48%',
+        borderRadius: 8,
         alignItems: 'center',
         marginBottom: 12,
-        elevation: 1,
     },
-    featureIcon: {
-        fontSize: 32,
-        marginBottom: 8,
-    },
-    featureTitle: {
-        fontSize: 14,
+    buttonText: {
+        fontSize: 16,
         fontWeight: '600',
         color: '#333',
     },
-    settingsButton: {
-        backgroundColor: '#4285F4',
-        borderRadius: 8,
-        padding: 16,
-        alignItems: 'center',
-        marginBottom: 24,
+    primaryButton: {
+        backgroundColor: '#4A90E2',
     },
-    settingsButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#fff',
+    primaryButtonText: {
+        color: '#FFFFFF',
     },
 });
 

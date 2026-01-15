@@ -1,169 +1,223 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { ToneType } from '../types';
-import StorageService from './StorageService';
+import type { ToneType } from '../types';
 
-interface CacheEntry {
-    result: string;
-    timestamp: number;
-}
-
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const MAX_CACHE_SIZE = 10;
+// Environment variables - replace with your actual API key
+const GEMINI_API_KEY = 'AIzaSyDUmfBmWODzBJGQPGgEzXJhQPMPcOWKxkU'; // Replace with your key
+const GEMINI_MODEL = 'gemini-1.5-flash';
 
 class GeminiService {
-    private genAI: GoogleGenerativeAI | null = null;
-    private cache: Map<string, CacheEntry> = new Map();
+    private genAI: GoogleGenerativeAI;
+    private model: any;
+    private cache: Map<string, { result: string; timestamp: number }>;
+    private requestQueue: Map<string, Promise<any>>;
 
-    async initialize(): Promise<boolean> {
+    constructor() {
+        this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        this.model = this.genAI.getGenerativeModel({ model: GEMINI_MODEL });
+        this.cache = new Map();
+        this.requestQueue = new Map();
+    }
+
+    // Get next word suggestions
+    async getSuggestions(text: string, context?: string): Promise<string[]> {
+        if (!text || text.trim().length === 0) return [];
+
+        const cacheKey = `suggestions_${text}_${context}`;
+
+        // Check cache first
+        const cached = this.getFromCache(cacheKey);
+        if (cached) {
+            try {
+                return JSON.parse(cached);
+            } catch {
+                return [];
+            }
+        }
+
+        const prompt = `Given the text: "${text}"${context ? ` and context: "${context}"` : ''}, provide 3 short next word or phrase suggestions that naturally continue the sentence. Return ONLY a JSON array of strings, no explanation. Example: ["suggestion1", "suggestion2", "suggestion3"]`;
+
         try {
-            const apiKey = await StorageService.getApiKey();
-            if (!apiKey) {
-                console.warn('No API key found');
-                return false;
-            }
-            if (apiKey.startsWith('sk-')) {
-                throw new Error('This looks like an OpenAI key. Please use a Gemini API key starting with "AIza" from Google AI Studio.');
-            }
-            this.genAI = new GoogleGenerativeAI(apiKey);
-            return true;
+            const result = await this.generateWithTimeout(prompt, 500);
+            const suggestions = this.parseJsonResponse(result);
+            this.setCache(cacheKey, JSON.stringify(suggestions));
+            return suggestions;
         } catch (error) {
-            console.error('Error initializing Gemini:', error);
-            return false;
+            console.error('Suggestion error:', error);
+            return [];
         }
     }
 
-    async setApiKey(apiKey: string): Promise<void> {
-        await StorageService.saveApiKey(apiKey);
-        this.genAI = new GoogleGenerativeAI(apiKey);
+    // Adjust tone of text
+    async adjustTone(text: string, tone: ToneType): Promise<string> {
+        if (!text || text.trim().length === 0) return text;
+
+        const cacheKey = `tone_${tone}_${text}`;
+        const cached = this.getFromCache(cacheKey);
+        if (cached) return cached;
+
+        const prompts: Record<ToneType, string> = {
+            professional: `Rewrite this text in a professional, formal tone suitable for business communication: "${text}". Return ONLY the rewritten text, no explanation.`,
+            casual: `Rewrite this text in a casual, friendly, conversational tone: "${text}". Return ONLY the rewritten text, no explanation.`,
+            confident: `Rewrite this text in a confident, assertive tone that shows authority: "${text}". Return ONLY the rewritten text, no explanation.`,
+            empathetic: `Rewrite this text in an empathetic, supportive, understanding tone: "${text}". Return ONLY the rewritten text, no explanation.`,
+            concise: `Make this text more concise and brief while keeping the core message: "${text}". Return ONLY the rewritten text, no explanation.`
+        };
+
+        try {
+            const result = await this.generateWithTimeout(prompts[tone], 2000);
+            const adjusted = result.trim().replace(/^["']|["']$/g, '');
+            this.setCache(cacheKey, adjusted);
+            return adjusted;
+        } catch (error) {
+            console.error('Tone adjustment error:', error);
+            return text;
+        }
     }
 
-    private getCacheKey(action: string, text: string): string {
-        return `${action}_${text.substring(0, 50)}`;
+    // Smart reply suggestions
+    async getSmartReplies(message: string, context?: string): Promise<string[]> {
+        if (!message || message.trim().length === 0) return [];
+
+        const cacheKey = `replies_${message}`;
+        const cached = this.getFromCache(cacheKey);
+        if (cached) {
+            try {
+                return JSON.parse(cached);
+            } catch {
+                return ['Thanks!', 'Sounds good', 'Got it'];
+            }
+        }
+
+        const prompt = `Given this message: "${message}", provide 3 short, contextually appropriate reply options. Keep each reply under 10 words. Return ONLY a JSON array of strings. Example: ["reply1", "reply2", "reply3"]`;
+
+        try {
+            const result = await this.generateWithTimeout(prompt, 1000);
+            const replies = this.parseJsonResponse(result);
+            this.setCache(cacheKey, JSON.stringify(replies));
+            return replies;
+        } catch (error) {
+            console.error('Smart reply error:', error);
+            return ['Thanks!', 'Sounds good', 'Got it'];
+        }
     }
 
+    // Expand text
+    async expandText(text: string): Promise<string> {
+        if (!text || text.trim().length === 0) return text;
+
+        const cacheKey = `expand_${text}`;
+        const cached = this.getFromCache(cacheKey);
+        if (cached) return cached;
+
+        const prompt = `Expand this brief text into a complete, well-written sentence or paragraph: "${text}". Keep it natural and conversational. Return ONLY the expanded text.`;
+
+        try {
+            const result = await this.generateWithTimeout(prompt, 2000);
+            const expanded = result.trim();
+            this.setCache(cacheKey, expanded);
+            return expanded;
+        } catch (error) {
+            console.error('Expansion error:', error);
+            return text;
+        }
+    }
+
+    // Summarize text
+    async summarizeText(text: string): Promise<string> {
+        if (!text || text.trim().length === 0) return text;
+
+        const cacheKey = `summarize_${text}`;
+        const cached = this.getFromCache(cacheKey);
+        if (cached) return cached;
+
+        const prompt = `Summarize this text concisely in 1-2 sentences: "${text}". Return ONLY the summary.`;
+
+        try {
+            const result = await this.generateWithTimeout(prompt, 2000);
+            const summary = result.trim();
+            this.setCache(cacheKey, summary);
+            return summary;
+        } catch (error) {
+            console.error('Summarization error:', error);
+            return text;
+        }
+    }
+
+    // Helper: Generate with timeout
+    private async generateWithTimeout(prompt: string, timeout: number): Promise<string> {
+        return Promise.race([
+            this.generate(prompt),
+            new Promise<string>((_, reject) =>
+                setTimeout(() => reject(new Error('Request timeout')), timeout)
+            )
+        ]);
+    }
+
+    // Helper: Generate content
+    private async generate(prompt: string): Promise<string> {
+        const result = await this.model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    }
+
+    // Helper: Parse JSON response
+    private parseJsonResponse(response: string): string[] {
+        try {
+            // Remove markdown code blocks if present
+            const cleaned = response.replace(/```json\n?|\n?```/g, '').trim();
+            return JSON.parse(cleaned);
+        } catch {
+            // Fallback: try to extract array from text
+            const match = response.match(/\[.*\]/);
+            if (match) {
+                try {
+                    return JSON.parse(match[0]);
+                } catch {
+                    return [];
+                }
+            }
+            return [];
+        }
+    }
+
+    // Cache management
     private getFromCache(key: string): string | null {
-        const entry = this.cache.get(key);
-        if (!entry) return null;
+        const cached = this.cache.get(key);
+        if (!cached) return null;
 
-        const now = Date.now();
-        if (now - entry.timestamp > CACHE_TTL) {
+        // Cache expires after 5 minutes
+        if (Date.now() - cached.timestamp > 300000) {
             this.cache.delete(key);
             return null;
         }
 
-        return entry.result;
+        return cached.result;
     }
 
-    private saveToCache(key: string, result: string): void {
-        // Limit cache size
-        if (this.cache.size >= MAX_CACHE_SIZE) {
+    private setCache(key: string, result: string): void {
+        // Keep cache size under 100 items
+        if (this.cache.size > 100) {
             const firstKey = this.cache.keys().next().value;
-            this.cache.delete(firstKey);
+            if (firstKey) {
+                this.cache.delete(firstKey);
+            }
         }
 
-        this.cache.set(key, {
-            result,
-            timestamp: Date.now(),
+        this.cache.set(key, { result, timestamp: Date.now() });
+    }
+
+    // Clear old cache entries
+    clearOldCache(): void {
+        const now = Date.now();
+        const keysToDelete: string[] = [];
+
+        this.cache.forEach((value, key) => {
+            if (now - value.timestamp > 300000) {
+                keysToDelete.push(key);
+            }
         });
-    }
 
-    private async generateContent(prompt: string, cacheKey?: string): Promise<string> {
-        if (!this.genAI) {
-            const initialized = await this.initialize();
-            if (!initialized || !this.genAI) {
-                throw new Error('Gemini API not initialized. Please set your API key.');
-            }
-        }
-
-        // Check cache
-        if (cacheKey) {
-            const cached = this.getFromCache(cacheKey);
-            if (cached) {
-                console.log('Returning cached result');
-                return cached;
-            }
-        }
-
-        try {
-            const model = this.genAI!.getGenerativeModel({ model: 'gemini-2.5-flash' });
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const text = response.text();
-
-            // Save to cache
-            if (cacheKey) {
-                this.saveToCache(cacheKey, text);
-            }
-
-            return text;
-        } catch (error: any) {
-            console.error('Detailed Gemini Error:', error);
-            if (error.message?.includes('API_KEY_INVALID')) {
-                throw new Error('Invalid API Key. Please ensure you are using a key from Google AI Studio (starts with AIza).');
-            }
-            throw new Error(error.message || 'Failed to generate content. Please check your API key and try again.');
-        }
-    }
-
-    async checkGrammar(text: string): Promise<string> {
-        return this.processText(text, 'grammar');
-    }
-
-    async checkSpelling(text: string): Promise<string> {
-        return this.processText(text, 'spelling');
-    }
-
-    async rephraseText(text: string, tone: ToneType): Promise<string> {
-        return this.processText(text, 'rephrase', tone);
-    }
-
-    async adjustTone(text: string, tone: ToneType): Promise<string> {
-        return this.processText(text, 'tone', tone);
-    }
-
-    async shortenText(text: string): Promise<string> {
-        return this.processText(text, 'shorten');
-    }
-
-    async expandText(text: string): Promise<string> {
-        return this.processText(text, 'expand');
-    }
-
-    /**
-     * Centralized method to process text based on feature and tone
-     */
-    async processText(text: string, feature: string, tone: ToneType = 'professional'): Promise<string> {
-        let prompt = '';
-
-        switch (feature) {
-            case 'grammar':
-                prompt = `Correct the grammar and punctuation of the following text while keeping its original meaning. Return ONLY the corrected text: "${text}"`;
-                break;
-            case 'spelling':
-                prompt = `Fix any spelling errors in the following text. Return ONLY the corrected text: "${text}"`;
-                break;
-            case 'rephrase':
-                prompt = `Rewrite the following text to make it sound more ${tone}. Keep the core message same but improve the flow and vocabulary. Return ONLY the rewritten text: "${text}"`;
-                break;
-            case 'tone':
-                prompt = `Change the tone of the following text to be strictly ${tone}. Return ONLY the adjusted text: "${text}"`;
-                break;
-            case 'shorten':
-                prompt = `Shorten the following text to be as concise as possible while retaining all key information. Return ONLY the shortened text: "${text}"`;
-                break;
-            case 'expand':
-                prompt = `Elaborate on the following text to provide more detail and context, keep it ${tone}. Return ONLY the expanded text: "${text}"`;
-                break;
-            default:
-                prompt = `Refine the following text: "${text}"`;
-        }
-
-        const cacheKey = this.getCacheKey(`${feature}_${tone}`, text);
-        return this.generateContent(prompt, cacheKey);
-    }
-
-    clearCache(): void {
-        this.cache.clear();
+        keysToDelete.forEach(key => this.cache.delete(key));
     }
 }
 

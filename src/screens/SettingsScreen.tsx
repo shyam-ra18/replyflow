@@ -1,214 +1,167 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
     View,
     Text,
     StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    ScrollView,
-    Alert,
     Switch,
+    ScrollView,
+    TouchableOpacity,
 } from 'react-native';
-import StorageService from '../services/StorageService';
-import GeminiService from '../services/GeminiService';
-import { UserPreferences, ToneType } from '../types';
+import { useSettingsStore } from '../store/useSettingsStore';
+import type { ToneType } from '../types';
 
-const SettingsScreen: React.FC = () => {
-    const [apiKey, setApiKey] = useState('');
-    const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-    const [testingApi, setTestingApi] = useState(false);
+const SettingsScreen = () => {
+    const {
+        aiEnabled,
+        hapticFeedback,
+        soundEnabled,
+        theme,
+        selectedTone,
+        setAIEnabled,
+        setHapticFeedback,
+        setSoundEnabled,
+        setTheme,
+        setSelectedTone,
+    } = useSettingsStore();
 
-    useEffect(() => {
-        loadSettings();
-    }, []);
-
-    const loadSettings = async () => {
-        const [savedApiKey, savedPreferences] = await Promise.all([
-            StorageService.getApiKey(),
-            StorageService.getPreferences(),
-        ]);
-
-        if (savedApiKey) setApiKey(savedApiKey);
-        setPreferences(savedPreferences);
-    };
-
-    const handleSaveApiKey = async () => {
-        if (!apiKey.trim()) {
-            Alert.alert('Error', 'Please enter a valid API key');
-            return;
-        }
-
-        try {
-            await StorageService.saveApiKey(apiKey);
-            await GeminiService.setApiKey(apiKey);
-            Alert.alert('Success', 'API key saved successfully');
-        } catch (error) {
-            Alert.alert('Error', 'Failed to save API key');
-        }
-    };
-
-    const handleTestApi = async () => {
-        if (!apiKey.trim()) {
-            Alert.alert('Error', 'Please enter an API key first');
-            return;
-        }
-
-        setTestingApi(true);
-        try {
-            await GeminiService.setApiKey(apiKey);
-            const result = await GeminiService.checkGrammar('This are a test');
-            Alert.alert('Success', `API is working!\n\nTest result: ${result}`);
-        } catch (error: any) {
-            console.log("error ==> ", error);
-            Alert.alert('Error', error.message || 'Failed to test API');
-        } finally {
-            setTestingApi(false);
-        }
-    };
-
-    const handleToggleFeature = async (feature: keyof UserPreferences['enabledFeatures']) => {
-        if (!preferences) return;
-
-        const updated = {
-            ...preferences,
-            enabledFeatures: {
-                ...preferences.enabledFeatures,
-                [feature]: !preferences.enabledFeatures[feature],
-            },
-        };
-
-        setPreferences(updated);
-        await StorageService.savePreferences(updated);
-    };
-
-    const handleClearCache = async () => {
-        Alert.alert(
-            'Clear Cache',
-            'Are you sure you want to clear the suggestion cache?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Clear',
-                    style: 'destructive',
-                    onPress: () => {
-                        GeminiService.clearCache();
-                        Alert.alert('Success', 'Cache cleared');
-                    },
-                },
-            ]
-        );
-    };
-
-    if (!preferences) {
-        return (
-            <View style={styles.container}>
-                <Text>Loading...</Text>
-            </View>
-        );
-    }
+    const tones: ToneType[] = ['professional', 'casual', 'confident', 'empathetic', 'concise'];
 
     return (
         <ScrollView style={styles.container}>
-            {/* API Configuration */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>API Configuration</Text>
-                <Text style={styles.label}>Google Gemini API Key</Text>
-                <TextInput
-                    style={styles.input}
-                    value={apiKey}
-                    onChangeText={setApiKey}
-                    placeholder="Enter your API key"
-                    secureTextEntry
-                    autoCapitalize="none"
-                />
-                <View style={styles.buttonRow}>
+                <Text style={styles.sectionTitle}>AI Features</Text>
+
+                <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                        <Text style={styles.settingLabel}>Enable AI Suggestions</Text>
+                        <Text style={styles.settingDescription}>
+                            Get smart word and phrase suggestions
+                        </Text>
+                    </View>
+                    <Switch
+                        value={aiEnabled}
+                        onValueChange={setAIEnabled}
+                        trackColor={{ false: '#D0D0D0', true: '#4A90E2' }}
+                    />
+                </View>
+
+                <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                        <Text style={styles.settingLabel}>Default Tone</Text>
+                        <Text style={styles.settingDescription}>
+                            {selectedTone ? `Current: ${selectedTone}` : 'No default tone'}
+                        </Text>
+                    </View>
+                </View>
+
+                <View style={styles.toneGrid}>
+                    {tones.map((tone) => (
+                        <TouchableOpacity
+                            key={tone}
+                            style={[
+                                styles.toneButton,
+                                selectedTone === tone && styles.toneButtonActive,
+                            ]}
+                            onPress={() => setSelectedTone(selectedTone === tone ? null : tone)}>
+                            <Text
+                                style={[
+                                    styles.toneButtonText,
+                                    selectedTone === tone && styles.toneButtonTextActive,
+                                ]}>
+                                {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Feedback</Text>
+
+                <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                        <Text style={styles.settingLabel}>Haptic Feedback</Text>
+                        <Text style={styles.settingDescription}>
+                            Vibrate on key press
+                        </Text>
+                    </View>
+                    <Switch
+                        value={hapticFeedback}
+                        onValueChange={setHapticFeedback}
+                        trackColor={{ false: '#D0D0D0', true: '#4A90E2' }}
+                    />
+                </View>
+
+                <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                        <Text style={styles.settingLabel}>Sound Effects</Text>
+                        <Text style={styles.settingDescription}>
+                            Play sound on key press
+                        </Text>
+                    </View>
+                    <Switch
+                        value={soundEnabled}
+                        onValueChange={setSoundEnabled}
+                        trackColor={{ false: '#D0D0D0', true: '#4A90E2' }}
+                    />
+                </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Appearance</Text>
+
+                <View style={styles.themeButtons}>
                     <TouchableOpacity
-                        style={[styles.button, styles.buttonSecondary]}
-                        onPress={handleSaveApiKey}
-                    >
-                        <Text style={styles.buttonSecondaryText}>Save</Text>
+                        style={[
+                            styles.themeButton,
+                            theme === 'light' && styles.themeButtonActive,
+                        ]}
+                        onPress={() => setTheme('light')}>
+                        <Text
+                            style={[
+                                styles.themeButtonText,
+                                theme === 'light' && styles.themeButtonTextActive,
+                            ]}>
+                            Light
+                        </Text>
                     </TouchableOpacity>
+
                     <TouchableOpacity
-                        style={[styles.button, styles.buttonPrimary]}
-                        onPress={handleTestApi}
-                        disabled={testingApi}
-                    >
-                        <Text style={styles.buttonPrimaryText}>
-                            {testingApi ? 'Testing...' : 'Test API'}
+                        style={[
+                            styles.themeButton,
+                            theme === 'dark' && styles.themeButtonActive,
+                        ]}
+                        onPress={() => setTheme('dark')}>
+                        <Text
+                            style={[
+                                styles.themeButtonText,
+                                theme === 'dark' && styles.themeButtonTextActive,
+                            ]}>
+                            Dark
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[
+                            styles.themeButton,
+                            theme === 'auto' && styles.themeButtonActive,
+                        ]}
+                        onPress={() => setTheme('auto')}>
+                        <Text
+                            style={[
+                                styles.themeButtonText,
+                                theme === 'auto' && styles.themeButtonTextActive,
+                            ]}>
+                            Auto
                         </Text>
                     </TouchableOpacity>
                 </View>
-                <Text style={styles.hint}>
-                    Get your API key from Google AI Studio: https://makersuite.google.com/app/apikey
-                </Text>
             </View>
 
-            {/* Features */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Enabled Features</Text>
-
-                <View style={styles.settingRow}>
-                    <Text style={styles.settingLabel}>Grammar Check</Text>
-                    <Switch
-                        value={preferences.enabledFeatures.grammar}
-                        onValueChange={() => handleToggleFeature('grammar')}
-                        trackColor={{ false: '#ccc', true: '#4285F4' }}
-                    />
-                </View>
-
-                <View style={styles.settingRow}>
-                    <Text style={styles.settingLabel}>Spelling Check</Text>
-                    <Switch
-                        value={preferences.enabledFeatures.spelling}
-                        onValueChange={() => handleToggleFeature('spelling')}
-                        trackColor={{ false: '#ccc', true: '#4285F4' }}
-                    />
-                </View>
-
-                <View style={styles.settingRow}>
-                    <Text style={styles.settingLabel}>Rephrase</Text>
-                    <Switch
-                        value={preferences.enabledFeatures.rephrase}
-                        onValueChange={() => handleToggleFeature('rephrase')}
-                        trackColor={{ false: '#ccc', true: '#4285F4' }}
-                    />
-                </View>
-
-                <View style={styles.settingRow}>
-                    <Text style={styles.settingLabel}>Tone Adjustment</Text>
-                    <Switch
-                        value={preferences.enabledFeatures.tone}
-                        onValueChange={() => handleToggleFeature('tone')}
-                        trackColor={{ false: '#ccc', true: '#4285F4' }}
-                    />
-                </View>
-
-                <View style={styles.settingRow}>
-                    <Text style={styles.settingLabel}>Length Adjustment</Text>
-                    <Switch
-                        value={preferences.enabledFeatures.length}
-                        onValueChange={() => handleToggleFeature('length')}
-                        trackColor={{ false: '#ccc', true: '#4285F4' }}
-                    />
-                </View>
-            </View>
-
-            {/* Privacy */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Privacy</Text>
-                <TouchableOpacity style={styles.settingButton} onPress={handleClearCache}>
-                    <Text style={styles.settingButtonText}>Clear Suggestion Cache</Text>
-                </TouchableOpacity>
-                <Text style={styles.hint}>
-                    ReplyFlow respects your privacy. Passwords and sensitive information are never captured.
-                </Text>
-            </View>
-
-            {/* About */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>About</Text>
-                <Text style={styles.aboutText}>ReplyFlow v1.0.0</Text>
-                <Text style={styles.aboutText}>AI-powered writing assistant</Text>
+            <View style={styles.infoSection}>
+                <Text style={styles.infoTitle}>About</Text>
+                <Text style={styles.infoText}>SmartType AI Keyboard v1.0.0</Text>
+                <Text style={styles.infoText}>Powered by Google Gemini AI</Text>
             </View>
         </ScrollView>
     );
@@ -217,67 +170,24 @@ const SettingsScreen: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#F5F5F5',
     },
     section: {
-        backgroundColor: '#fff',
-        padding: 16,
-        marginBottom: 12,
+        backgroundColor: '#FFFFFF',
+        margin: 16,
+        padding: 20,
+        borderRadius: 12,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: 'bold',
         color: '#333',
         marginBottom: 16,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#666',
-        marginBottom: 8,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        color: '#333',
-        borderRadius: 8,
-        padding: 12,
-        fontSize: 14,
-        marginBottom: 12,
-    },
-    buttonRow: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    button: {
-        flex: 1,
-        padding: 12,
-        borderRadius: 8,
-        alignItems: 'center',
-    },
-    buttonPrimary: {
-        backgroundColor: '#4285F4',
-    },
-    buttonSecondary: {
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#4285F4',
-    },
-    buttonPrimaryText: {
-        color: '#fff',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    buttonSecondaryText: {
-        color: '#4285F4',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    hint: {
-        fontSize: 12,
-        color: '#999',
-        marginTop: 8,
-        lineHeight: 18,
     },
     settingRow: {
         flexDirection: 'row',
@@ -285,26 +195,84 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
+        borderBottomColor: '#F0F0F0',
+    },
+    settingInfo: {
+        flex: 1,
+        marginRight: 16,
     },
     settingLabel: {
         fontSize: 16,
         color: '#333',
+        marginBottom: 4,
     },
-    settingButton: {
-        backgroundColor: '#f0f0f0',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 12,
-    },
-    settingButtonText: {
-        fontSize: 14,
-        color: '#333',
-        textAlign: 'center',
-    },
-    aboutText: {
+    settingDescription: {
         fontSize: 14,
         color: '#666',
+    },
+    toneGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginTop: 12,
+        gap: 8,
+    },
+    toneButton: {
+        backgroundColor: '#F0F0F0',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        marginRight: 8,
+        marginBottom: 8,
+    },
+    toneButtonActive: {
+        backgroundColor: '#4A90E2',
+    },
+    toneButtonText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '600',
+    },
+    toneButtonTextActive: {
+        color: '#FFFFFF',
+    },
+    themeButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    themeButton: {
+        flex: 1,
+        backgroundColor: '#F0F0F0',
+        padding: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    themeButtonActive: {
+        backgroundColor: '#4A90E2',
+    },
+    themeButtonText: {
+        fontSize: 16,
+        color: '#666',
+        fontWeight: '600',
+    },
+    themeButtonTextActive: {
+        color: '#FFFFFF',
+    },
+    infoSection: {
+        backgroundColor: '#E3F2FD',
+        margin: 16,
+        padding: 20,
+        borderRadius: 12,
+        marginBottom: 32,
+    },
+    infoTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1976D2',
+        marginBottom: 12,
+    },
+    infoText: {
+        fontSize: 14,
+        color: '#1976D2',
         marginBottom: 4,
     },
 });

@@ -1,58 +1,27 @@
-// Type definitions for the app
+export type ToneType = 'professional' | 'casual' | 'confident' | 'empathetic' | 'concise';
 
-export interface ServiceStatus {
-    isRunning: boolean;
-    hasOverlayPermission: boolean;
-    hasAccessibilityPermission: boolean;
-    hasNotificationPermission: boolean;
+export interface KeyboardState {
+    isEnabled: boolean;
+    isDefault: boolean;
+    currentText: string;
+    inputType: number;
+    isPassword: boolean;
 }
 
-export interface UserPreferences {
-    apiKey: string;
-    defaultTone: ToneType;
-    enabledFeatures: {
-        grammar: boolean;
-        spelling: boolean;
-        rephrase: boolean;
-        tone: boolean;
-        length: boolean;
-    };
-    floatingButtonSize: number;
-    floatingButtonOpacity: number;
+export interface SuggestionItem {
+    text: string;
+    confidence: number;
 }
 
-export type ToneType =
-    | 'professional'
-    | 'casual'
-    | 'friendly'
-    | 'formal'
-    | 'confident'
-    | 'polite'
-    | 'direct';
-
-export type FeatureType =
-    | 'rephrase'
-    | 'grammar'
-    | 'spelling'
-    | 'tone'
-    | 'length';
-
-export interface Suggestion {
-    id: string;
-    type: FeatureType;
-    originalText: string;
-    suggestedText: string;
-    tone?: ToneType;
-    timestamp: number;
+export interface AIFeature {
+    type: 'tone' | 'expand' | 'summarize' | 'reply';
+    enabled: boolean;
 }
 
-export interface TabItem {
-    id: FeatureType;
-    label: string;
-    icon: string;
-}
-
-export interface FloatingButtonPosition {
-    x: number;
-    y: number;
+export interface UserSettings {
+    aiEnabled: boolean;
+    hapticFeedback: boolean;
+    soundEnabled: boolean;
+    theme: 'light' | 'dark' | 'auto';
+    selectedTone: ToneType | null;
 }
