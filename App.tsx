@@ -27,7 +27,7 @@ const App = () => {
 
   return (
     <>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="light-content" backgroundColor="#4A90E2" />
       <NavigationContainer>
         <Stack.Navigator
           initialRouteName="Home"
@@ -43,7 +43,7 @@ const App = () => {
           <Stack.Screen
             name="Home"
             component={HomeScreen}
-            options={{ title: 'SmartType AI Keyboard' }}
+            options={{ title: 'ReplyFlow AI Keyboard' }}
           />
           <Stack.Screen
             name="Setup"

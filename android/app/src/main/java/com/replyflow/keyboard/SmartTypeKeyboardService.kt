@@ -4,13 +4,15 @@ import android.inputmethodservice.InputMethodService
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.TextView
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.PopupWindow
+import android.widget.ProgressBar
 import android.os.Vibrator
 import android.os.VibrationEffect
 import android.content.Context
@@ -24,20 +26,53 @@ import java.lang.ref.WeakReference
 
 class SmartTypeKeyboardService : InputMethodService() {
     
-    private var keyboardContainer: LinearLayout? = null
+    private var keyboardContainer: FrameLayout? = null
+    private var mainContainer: LinearLayout? = null
+    private var quickSuggestions: View? = null
     private var aiToolbar: View? = null
-    private var suggestionBar: View? = null
     private var lettersLayout: View? = null
     private var numbersLayout: View? = null
     private var symbolsLayout: View? = null
+    private var loadingOverlay: View? = null
     private var currentLayout = 0
     private var isShiftActive = false
     private var isCapsLock = false
     private var vibrator: Vibrator? = null
     private var tonePopup: PopupWindow? = null
     private val handler = Handler(Looper.getMainLooper())
-    private var typingRunnable: Runnable? = null
     private var isViewInitialized = false
+    
+    // Backspace continuous deletion
+    private var isBackspacePressed = false
+    private var backspaceDeleteRunnable: Runnable? = null
+    private var deleteSpeed = 100L // Start slow
+    private var deleteStartTime = 0L
+    
+    // Loading messages
+    private val toneLoadingMessages = listOf(
+        "✨ Adjusting your tone...",
+        "🎯 Refining your message...",
+        "🎨 Applying polish...",
+        "📝 Rewriting with care..."
+    )
+    private val expandLoadingMessages = listOf(
+        "📝 Expanding your message...",
+        "✍️ Writing it out for you...",
+        "🌟 Crafting complete sentences...",
+        "💬 Making it comprehensive..."
+    )
+    private val summarizeLoadingMessages = listOf(
+        "🔍 Condensing your message...",
+        "📊 Creating a summary...",
+        "⚡ Making it concise...",
+        "🎯 Extracting key points..."
+    )
+    private val replyLoadingMessages = listOf(
+        "💭 Generating reply options...",
+        "🤖 Thinking of responses...",
+        "💡 Crafting smart replies...",
+        "✉️ Finding the right words..."
+    )
     
     companion object {
         private var instance: WeakReference<SmartTypeKeyboardService>? = null
@@ -59,45 +94,126 @@ class SmartTypeKeyboardService : InputMethodService() {
     override fun onCreateInputView(): View {
         val inflater = LayoutInflater.from(this)
         
-        // Create main container
-        val container = LinearLayout(this).apply {
+        // Create root FrameLayout (for overlay support)
+        val rootContainer = FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        keyboardContainer = rootContainer
+        
+        // Create main keyboard container
+        val main = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
-        keyboardContainer = container
+        mainContainer = main
+        
+        // Inflate quick suggestions bar (pre-defined messages)
+        quickSuggestions = inflater.inflate(R.layout.quick_suggestions, main, false)
+        setupQuickSuggestions()
         
         // Inflate AI toolbar
-        aiToolbar = inflater.inflate(R.layout.ai_toolbar, container, false)
+        aiToolbar = inflater.inflate(R.layout.ai_toolbar, main, false)
         setupAIToolbar()
         
-        // Inflate suggestion bar
-        suggestionBar = inflater.inflate(R.layout.suggestion_bar, container, false)
-        setupSuggestionBar()
-        
         // Inflate keyboard layouts
-        lettersLayout = inflater.inflate(R.layout.keyboard_letters, container, false)
-        numbersLayout = inflater.inflate(R.layout.keyboard_numbers, container, false)
-        symbolsLayout = inflater.inflate(R.layout.keyboard_symbols, container, false)
+        lettersLayout = inflater.inflate(R.layout.keyboard_letters, main, false)
+        numbersLayout = inflater.inflate(R.layout.keyboard_numbers, main, false)
+        symbolsLayout = inflater.inflate(R.layout.keyboard_symbols, main, false)
         
-        // Setup all layouts
+        // Setup all layouts with improved backspace
         setupLettersLayout()
         setupNumbersLayout()
         setupSymbolsLayout()
         
-        // Add views to container
-        container.addView(aiToolbar)
-        container.addView(suggestionBar)
-        container.addView(lettersLayout)
+        // Inflate loading overlay
+        loadingOverlay = inflater.inflate(R.layout.loading_overlay, rootContainer, false)
+        setupLoadingOverlay()
+        
+        // Add views to main container
+        main.addView(quickSuggestions)
+        main.addView(aiToolbar)
+        main.addView(lettersLayout)
         currentLayout = LAYOUT_LETTERS
         
+        // Add main container and loading overlay to root
+        rootContainer.addView(main)
+        rootContainer.addView(loadingOverlay)
+        
         // Enable hardware acceleration
-        container.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        rootContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         
         isViewInitialized = true
-        return container
+        return rootContainer
+    }
+    
+    private fun setupQuickSuggestions() {
+        val suggestions = quickSuggestions ?: return
+        
+        val quickIds = listOf(
+            R.id.quick_1, R.id.quick_2, R.id.quick_3,
+            R.id.quick_4, R.id.quick_5, R.id.quick_6
+        )
+        
+        quickIds.forEach { id ->
+            suggestions.findViewById<TextView>(id)?.setOnClickListener {
+                vibrateKey()
+                val text = (it as TextView).text.toString()
+                currentInputConnection?.commitText(text, 1)
+            }
+        }
+    }
+    
+    private fun setupLoadingOverlay() {
+        // Now using inline loading in AI toolbar
+        val toolbar = aiToolbar ?: return
+        
+        toolbar.findViewById<Button>(R.id.btn_cancel_loading)?.setOnClickListener {
+            hideLoading()
+            val params = Arguments.createMap()
+            params.putString("action", "cancel")
+            sendEventToReactNative("onAIAction", params)
+        }
+    }
+    
+    private fun showLoading(messages: List<String>) {
+        val toolbar = aiToolbar ?: return
+        
+        handler.post {
+            val randomMessage = messages.random()
+            toolbar.findViewById<TextView>(R.id.loading_text)?.text = randomMessage
+            toolbar.findViewById<View>(R.id.ai_buttons_container)?.visibility = View.GONE
+            toolbar.findViewById<View>(R.id.loading_container)?.visibility = View.VISIBLE
+        }
+        
+        // Auto-hide after 30 seconds (timeout)
+        handler.postDelayed({
+            val loadingContainer = toolbar.findViewById<View>(R.id.loading_container)
+            if (loadingContainer?.visibility == View.VISIBLE) {
+                showLoadingError()
+            }
+        }, 30000)
+    }
+    
+    fun hideLoading() {
+        val toolbar = aiToolbar ?: return
+        handler.post {
+            toolbar.findViewById<View>(R.id.loading_container)?.visibility = View.GONE
+            toolbar.findViewById<View>(R.id.ai_buttons_container)?.visibility = View.VISIBLE
+        }
+    }
+    
+    private fun showLoadingError() {
+        val toolbar = aiToolbar ?: return
+        toolbar.findViewById<TextView>(R.id.loading_text)?.text = "⚠️ Timeout. Try again."
+        handler.postDelayed({
+            hideLoading()
+        }, 2000)
     }
     
     private fun setupAIToolbar() {
@@ -110,85 +226,20 @@ class SmartTypeKeyboardService : InputMethodService() {
         
         toolbar.findViewById<Button>(R.id.btn_expand)?.setOnClickListener {
             vibrateKey()
+            showLoading(expandLoadingMessages)
             triggerAIAction("expand")
         }
         
         toolbar.findViewById<Button>(R.id.btn_summarize)?.setOnClickListener {
             vibrateKey()
+            showLoading(summarizeLoadingMessages)
             triggerAIAction("summarize")
         }
         
         toolbar.findViewById<Button>(R.id.btn_replies)?.setOnClickListener {
             vibrateKey()
+            showLoading(replyLoadingMessages)
             triggerAIAction("replies")
-        }
-    }
-    
-    private fun setupSuggestionBar() {
-        val bar = suggestionBar ?: return
-        
-        bar.findViewById<TextView>(R.id.suggestion_1)?.setOnClickListener {
-            vibrateKey()
-            insertSuggestion((it as TextView).text.toString())
-        }
-        bar.findViewById<TextView>(R.id.suggestion_2)?.setOnClickListener {
-            vibrateKey()
-            insertSuggestion((it as TextView).text.toString())
-        }
-        bar.findViewById<TextView>(R.id.suggestion_3)?.setOnClickListener {
-            vibrateKey()
-            insertSuggestion((it as TextView).text.toString())
-        }
-    }
-    
-    private fun insertSuggestion(text: String) {
-        currentInputConnection?.commitText("$text ", 1)
-        hideSuggestions()
-    }
-    
-    fun showSuggestions(suggestions: List<String>) {
-        if (!isViewInitialized) return
-        val bar = suggestionBar ?: return
-        
-        handler.post {
-            bar.findViewById<TextView>(R.id.suggestion_hint)?.visibility = View.GONE
-            
-            val chip1 = bar.findViewById<TextView>(R.id.suggestion_1)
-            val chip2 = bar.findViewById<TextView>(R.id.suggestion_2)
-            val chip3 = bar.findViewById<TextView>(R.id.suggestion_3)
-            
-            if (suggestions.isNotEmpty()) {
-                chip1?.text = suggestions[0]
-                chip1?.visibility = View.VISIBLE
-            } else {
-                chip1?.visibility = View.GONE
-            }
-            
-            if (suggestions.size > 1) {
-                chip2?.text = suggestions[1]
-                chip2?.visibility = View.VISIBLE
-            } else {
-                chip2?.visibility = View.GONE
-            }
-            
-            if (suggestions.size > 2) {
-                chip3?.text = suggestions[2]
-                chip3?.visibility = View.VISIBLE
-            } else {
-                chip3?.visibility = View.GONE
-            }
-        }
-    }
-    
-    private fun hideSuggestions() {
-        if (!isViewInitialized) return
-        val bar = suggestionBar ?: return
-        
-        handler.post {
-            bar.findViewById<TextView>(R.id.suggestion_1)?.visibility = View.GONE
-            bar.findViewById<TextView>(R.id.suggestion_2)?.visibility = View.GONE
-            bar.findViewById<TextView>(R.id.suggestion_3)?.visibility = View.GONE
-            bar.findViewById<TextView>(R.id.suggestion_hint)?.visibility = View.VISIBLE
         }
     }
     
@@ -204,25 +255,20 @@ class SmartTypeKeyboardService : InputMethodService() {
             true
         )
         
-        toneView.findViewById<Button>(R.id.tone_professional)?.setOnClickListener {
-            applyTone("professional")
-            tonePopup?.dismiss()
-        }
-        toneView.findViewById<Button>(R.id.tone_casual)?.setOnClickListener {
-            applyTone("casual")
-            tonePopup?.dismiss()
-        }
-        toneView.findViewById<Button>(R.id.tone_confident)?.setOnClickListener {
-            applyTone("confident")
-            tonePopup?.dismiss()
-        }
-        toneView.findViewById<Button>(R.id.tone_empathetic)?.setOnClickListener {
-            applyTone("empathetic")
-            tonePopup?.dismiss()
-        }
-        toneView.findViewById<Button>(R.id.tone_concise)?.setOnClickListener {
-            applyTone("concise")
-            tonePopup?.dismiss()
+        val toneButtons = mapOf(
+            R.id.tone_professional to "professional",
+            R.id.tone_casual to "casual",
+            R.id.tone_confident to "confident",
+            R.id.tone_empathetic to "empathetic",
+            R.id.tone_concise to "concise"
+        )
+        
+        toneButtons.forEach { (id, tone) ->
+            toneView.findViewById<Button>(id)?.setOnClickListener {
+                tonePopup?.dismiss()
+                showLoading(toneLoadingMessages)
+                applyTone(tone)
+            }
         }
         
         tonePopup?.showAsDropDown(toolbar)
@@ -236,11 +282,17 @@ class SmartTypeKeyboardService : InputMethodService() {
             params.putString("tone", tone)
             params.putString("text", currentText)
             sendEventToReactNative("onAIAction", params)
+        } else {
+            hideLoading()
         }
     }
     
     private fun triggerAIAction(action: String) {
         val currentText = getCurrentTextFromModule()
+        if (currentText.isEmpty() && action != "replies") {
+            hideLoading()
+            return
+        }
         val params = Arguments.createMap()
         params.putString("action", action)
         params.putString("text", currentText)
@@ -248,10 +300,17 @@ class SmartTypeKeyboardService : InputMethodService() {
     }
     
     fun updateSuggestions(suggestions: List<String>) {
-        showSuggestions(suggestions)
+        // Show suggestions as smart replies
+        hideLoading()
+        // For now, just insert the first suggestion if available
+        if (suggestions.isNotEmpty()) {
+            // We could show a popup with options, but for simplicity:
+            // Just show them in a toast-like way or insert first one
+        }
     }
     
     fun replaceWithAIResponse(newText: String) {
+        hideLoading()
         currentInputConnection?.let { ic ->
             ic.performContextMenuAction(android.R.id.selectAll)
             ic.commitText(newText, 1)
@@ -259,7 +318,7 @@ class SmartTypeKeyboardService : InputMethodService() {
     }
     
     private fun switchToLayout(layout: Int) {
-        val container = keyboardContainer ?: return
+        val container = mainContainer ?: return
         if (container.childCount < 3) return
         
         container.removeViewAt(2)
@@ -270,18 +329,6 @@ class SmartTypeKeyboardService : InputMethodService() {
             LAYOUT_SYMBOLS -> symbolsLayout?.let { container.addView(it) }
         }
         currentLayout = layout
-    }
-    
-    private fun requestSuggestions(text: String) {
-        typingRunnable?.let { handler.removeCallbacks(it) }
-        
-        typingRunnable = Runnable {
-            val params = Arguments.createMap()
-            params.putString("action", "suggestions")
-            params.putString("text", text)
-            sendEventToReactNative("onAIAction", params)
-        }
-        handler.postDelayed(typingRunnable!!, 300)
     }
     
     private fun setupLettersLayout() {
@@ -308,11 +355,7 @@ class SmartTypeKeyboardService : InputMethodService() {
                     isShiftActive = false
                     updateShiftKeyVisual()
                 }
-                
-                val currentText = getCurrentTextFromModule()
-                if (currentText.isNotEmpty()) {
-                    requestSuggestions(currentText)
-                }
+                // REMOVED: No more real-time suggestion requests
             }
         }
         
@@ -336,24 +379,13 @@ class SmartTypeKeyboardService : InputMethodService() {
             updateShiftKeyVisual()
         }
         
-        val backspaceButton = layout.findViewById<Button>(R.id.key_backspace)
-        backspaceButton?.setOnClickListener {
-            vibrateKey()
-            currentInputConnection?.deleteSurroundingText(1, 0)
-        }
-        backspaceButton?.setOnLongClickListener {
-            vibrateKey()
-            currentInputConnection?.deleteSurroundingText(20, 0)
-            true
-        }
+        // Improved backspace with selection delete + continuous deletion
+        setupBackspaceButton(layout.findViewById(R.id.key_backspace))
         
         layout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
             vibrateKey()
             currentInputConnection?.commitText(" ", 1)
-            val currentText = getCurrentTextFromModule()
-            if (currentText.isNotEmpty()) {
-                requestSuggestions(currentText)
-            }
+            // REMOVED: No more real-time suggestion requests
         }
         
         layout.findViewById<Button>(R.id.key_enter)?.setOnClickListener {
@@ -368,6 +400,109 @@ class SmartTypeKeyboardService : InputMethodService() {
             vibrateKey()
             switchToLayout(LAYOUT_NUMBERS)
         }
+    }
+    
+    private fun setupBackspaceButton(button: Button?) {
+        button ?: return
+        
+        button.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    vibrateKey()
+                    isBackspacePressed = true
+                    deleteStartTime = System.currentTimeMillis()
+                    deleteSpeed = 100L
+                    
+                    // First delete - check for selection
+                    deleteOneUnit()
+                    
+                    // Start continuous deletion
+                    startContinuousDelete()
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isBackspacePressed = false
+                    stopContinuousDelete()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+    
+    private fun deleteOneUnit() {
+        val ic = currentInputConnection ?: return
+        
+        // Check if there's selected text
+        val selectedText = ic.getSelectedText(0)
+        if (selectedText != null && selectedText.isNotEmpty()) {
+            // Delete entire selection
+            ic.commitText("", 1)
+        } else {
+            // Check how long backspace has been held
+            val elapsedTime = System.currentTimeMillis() - deleteStartTime
+            
+            when {
+                elapsedTime < 500 -> {
+                    // First 500ms: Delete character by character
+                    ic.deleteSurroundingText(1, 0)
+                    deleteSpeed = 100L
+                }
+                elapsedTime < 2000 -> {
+                    // 500ms - 2s: Delete word by word
+                    deleteWord(ic)
+                    deleteSpeed = 150L
+                }
+                else -> {
+                    // After 2s: Delete rapidly (multiple chars)
+                    ic.deleteSurroundingText(5, 0)
+                    deleteSpeed = 50L
+                }
+            }
+        }
+    }
+    
+    private fun deleteWord(ic: android.view.inputmethod.InputConnection) {
+        // Get text before cursor
+        val textBefore = ic.getTextBeforeCursor(50, 0) ?: return
+        if (textBefore.isEmpty()) return
+        
+        // Find word boundary
+        var deleteCount = 0
+        var foundWord = false
+        for (i in textBefore.length - 1 downTo 0) {
+            val char = textBefore[i]
+            if (char.isWhitespace()) {
+                if (foundWord) break
+            } else {
+                foundWord = true
+            }
+            deleteCount++
+        }
+        
+        if (deleteCount > 0) {
+            ic.deleteSurroundingText(deleteCount, 0)
+        } else {
+            ic.deleteSurroundingText(1, 0)
+        }
+    }
+    
+    private fun startContinuousDelete() {
+        backspaceDeleteRunnable = object : Runnable {
+            override fun run() {
+                if (isBackspacePressed) {
+                    vibrateKey()
+                    deleteOneUnit()
+                    handler.postDelayed(this, deleteSpeed)
+                }
+            }
+        }
+        handler.postDelayed(backspaceDeleteRunnable!!, 400) // Initial delay before repeat
+    }
+    
+    private fun stopContinuousDelete() {
+        backspaceDeleteRunnable?.let { handler.removeCallbacks(it) }
+        backspaceDeleteRunnable = null
     }
     
     private fun setupNumbersLayout() {
@@ -412,10 +547,7 @@ class SmartTypeKeyboardService : InputMethodService() {
             switchToLayout(LAYOUT_SYMBOLS)
         }
         
-        layout.findViewById<Button>(R.id.key_backspace)?.setOnClickListener {
-            vibrateKey()
-            currentInputConnection?.deleteSurroundingText(1, 0)
-        }
+        setupBackspaceButton(layout.findViewById(R.id.key_backspace))
         
         layout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
             vibrateKey()
@@ -465,10 +597,7 @@ class SmartTypeKeyboardService : InputMethodService() {
             switchToLayout(LAYOUT_NUMBERS)
         }
         
-        layout.findViewById<Button>(R.id.key_backspace)?.setOnClickListener {
-            vibrateKey()
-            currentInputConnection?.deleteSurroundingText(1, 0)
-        }
+        setupBackspaceButton(layout.findViewById(R.id.key_backspace))
         
         layout.findViewById<Button>(R.id.key_space)?.setOnClickListener {
             vibrateKey()
@@ -513,7 +642,7 @@ class SmartTypeKeyboardService : InputMethodService() {
     override fun onFinishInput() {
         super.onFinishInput()
         if (isViewInitialized) {
-            hideSuggestions()
+            hideLoading()
         }
         sendEventToReactNative("onInputFinish", null)
     }
@@ -581,7 +710,7 @@ class SmartTypeKeyboardService : InputMethodService() {
     override fun onDestroy() {
         super.onDestroy()
         tonePopup?.dismiss()
-        typingRunnable?.let { handler.removeCallbacks(it) }
+        stopContinuousDelete()
         isViewInitialized = false
         instance = null
     }

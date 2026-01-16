@@ -37,11 +37,18 @@ class KeyboardAIService {
 
         const { action, text = '', tone } = event;
 
+        if (!text) {
+            return;
+        }
+
+        // Handle cancel action
+        if (action === 'cancel') {
+            console.log('AI action cancelled by user');
+            return;
+        }
+
         try {
             switch (action) {
-                case 'suggestions':
-                    await this.handleSuggestions(text);
-                    break;
                 case 'tone':
                     await this.handleToneAdjustment(text, tone as ToneType);
                     break;
@@ -54,24 +61,12 @@ class KeyboardAIService {
                 case 'replies':
                     await this.handleSmartReplies(text);
                     break;
+                // REMOVED: No more real-time suggestions
                 default:
                     console.warn('Unknown AI action:', action);
             }
         } catch (error) {
             console.error('AI action error:', error);
-        }
-    }
-
-    private async handleSuggestions(text: string) {
-        if (!text || text.trim().length < 2) return;
-
-        try {
-            const suggestions = await GeminiService.getSuggestions(text);
-            if (suggestions.length > 0) {
-                KeyboardModule.updateSuggestions(suggestions);
-            }
-        } catch (error) {
-            console.error('Suggestion error:', error);
         }
     }
 
@@ -122,8 +117,9 @@ class KeyboardAIService {
             console.log('Getting smart replies for:', text);
             const replies = await GeminiService.getSmartReplies(text);
             if (replies.length > 0) {
-                // Show replies as suggestions
-                KeyboardModule.updateSuggestions(replies);
+                // Insert the first reply directly
+                // In a full implementation, we'd show a picker
+                KeyboardModule.replaceWithAIResponse(replies[0]);
             }
         } catch (error) {
             console.error('Smart replies error:', error);

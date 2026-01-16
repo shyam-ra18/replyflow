@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">replyflow</string>
+    <string name="app_name">ReplyFlow</string>
     <string name="accessibility_service_description">ReplyFlow monitors your text input to provide writing assistance, grammar checking, and suggestions. Your privacy is protected - passwords and sensitive information are never captured.</string>
 </resources>

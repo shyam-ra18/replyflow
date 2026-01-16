@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#F3F4F6"
+    android:scrollbars="none"
+    android:paddingVertical="6dp"
+    android:paddingHorizontal="4dp">
+
+    <LinearLayout
+        android:id="@+id/quick_suggestion_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/quick_1"
+            style="@style/QuickSuggestionChip"
+            android:text="Thanks! I'll get back to you soon." />
+
+        <TextView
+            android:id="@+id/quick_2"
+            style="@style/QuickSuggestionChip"
+            android:text="Sounds good! 👍" />
+
+        <TextView
+            android:id="@+id/quick_3"
+            style="@style/QuickSuggestionChip"
+            android:text="Got it! Talk later." />
+
+        <TextView
+            android:id="@+id/quick_4"
+            style="@style/QuickSuggestionChip"
+            android:text="Thanks for the update!" />
+
+        <TextView
+            android:id="@+id/quick_5"
+            style="@style/QuickSuggestionChip"
+            android:text="I appreciate it! 🙏" />
+
+        <TextView
+            android:id="@+id/quick_6"
+            style="@style/QuickSuggestionChip"
+            android:text="Will do!" />
+
+    </LinearLayout>
+
+</HorizontalScrollView>
